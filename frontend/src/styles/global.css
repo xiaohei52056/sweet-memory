@@ -1,0 +1,197 @@
+/* ============================================================
+   星河回忆 · 设计系统
+   基调：深空蓝黑 + 星光暖金 · 细衬线宋体
+   ============================================================ */
+
+:root {
+  /* 色彩 */
+  --bg-deep: #04060f;
+  --bg-deep-2: #070b1a;
+  --ink: #e9edf6;
+  --ink-dim: rgba(233, 237, 246, 0.62);
+  --ink-faint: rgba(233, 237, 246, 0.38);
+
+  --gold: #e8c37e;
+  --gold-bright: #f5d9a4;
+  --gold-dim: rgba(232, 195, 126, 0.55);
+  --gold-line: rgba(232, 195, 126, 0.85);
+  --gold-faint: rgba(232, 195, 126, 0.16);
+
+  --line: rgba(233, 237, 246, 0.12);
+  --glass: rgba(10, 14, 28, 0.55);
+  --glass-strong: rgba(8, 11, 24, 0.78);
+
+  --danger: #e07a7a;
+
+  /* 字体 */
+  --font-serif: 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+  --font-sans: 'PingFang SC', 'HarmonicOS Sans SC', 'Microsoft YaHei', sans-serif;
+
+  /* 圆角 / 阴影 */
+  --r-sm: 10px;
+  --r-md: 16px;
+  --r-lg: 24px;
+  --shadow-card: 0 12px 40px rgba(0, 0, 0, 0.45);
+  --glow-gold: 0 0 24px rgba(232, 195, 126, 0.28);
+
+  /* 缓动 */
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
+  --ease-spring: cubic-bezier(0.34, 1.4, 0.44, 1);
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background: var(--bg-deep);
+  color: var(--ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.6;
+  overflow: hidden;
+  /* 注意：Windows 下不开 antialiased，保留 ClearType 子像素渲染，中文更清晰 */
+}
+
+img {
+  display: block;
+  max-width: 100%;
+  user-select: none;
+  -webkit-user-drag: none;
+}
+
+button {
+  font-family: inherit;
+  color: inherit;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+input,
+textarea {
+  font-family: inherit;
+  color: inherit;
+}
+
+::selection {
+  background: var(--gold-faint);
+  color: var(--gold-bright);
+}
+
+/* 细滚动条（后台区域用） */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(233, 237, 246, 0.18);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ---------- 通用组件类 ---------- */
+
+.serif {
+  font-family: var(--font-serif);
+}
+
+/* 玻璃拟态面板 */
+.glass {
+  background: var(--glass);
+  backdrop-filter: blur(18px) saturate(140%);
+  -webkit-backdrop-filter: blur(18px) saturate(140%);
+  border: 1px solid var(--line);
+}
+
+/* 金色描边按钮 */
+.btn-gold {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  border-radius: 999px;
+  border: 1px solid var(--gold-line);
+  color: var(--gold-bright);
+  font-family: var(--font-serif);
+  font-size: 15px;
+  font-weight: 400;
+  letter-spacing: 0.12em;
+  background: linear-gradient(135deg, rgba(232, 195, 126, 0.14), rgba(232, 195, 126, 0.05));
+  box-shadow: inset 0 0 12px rgba(232, 195, 126, 0.08);
+  transition: all 0.35s var(--ease-out);
+}
+.btn-gold:hover {
+  border-color: var(--gold-bright);
+  box-shadow: var(--glow-gold), inset 0 0 16px rgba(232, 195, 126, 0.12);
+  transform: translateY(-1px);
+}
+
+/* 幽灵按钮 */
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--ink-dim);
+  font-size: 14px;
+  transition: all 0.3s var(--ease-out);
+}
+.btn-ghost:hover {
+  color: var(--ink);
+  border-color: var(--ink-faint);
+}
+
+/* 图标按钮 */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  color: var(--ink-dim);
+  transition: all 0.3s var(--ease-out);
+}
+.btn-icon:hover {
+  color: var(--gold-bright);
+  background: var(--gold-faint);
+}
+
+/* 淡入工具 */
+.fade-up {
+  animation: fadeUp 0.8s var(--ease-out) both;
+}
+@keyframes fadeUp {
+  from {
+    opacity: 0;
+    transform: translateY(24px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 移动端隐藏桌面元素 */
+@media (max-width: 768px) {
+  .hide-mobile {
+    display: none !important;
+  }
+}

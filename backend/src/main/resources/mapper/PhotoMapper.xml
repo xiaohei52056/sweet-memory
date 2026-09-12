@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN"
+        "https://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.sweetmemory.mapper.PhotoMapper">
+
+    <select id="listByDeleted" resultType="com.sweetmemory.entity.Photo">
+        SELECT id, url, thumb, taken_at, note, audio_url, audio_duration,
+               featured, deleted, created_at
+        FROM photo
+        WHERE deleted = #{deleted}
+        ORDER BY taken_at ASC, id ASC
+    </select>
+
+    <select id="findById" resultType="com.sweetmemory.entity.Photo">
+        SELECT id, url, thumb, taken_at, note, audio_url, audio_duration,
+               featured, deleted, created_at
+        FROM photo
+        WHERE id = #{id}
+    </select>
+
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id">
+        INSERT INTO photo (url, thumb, taken_at, note, audio_url, audio_duration, featured, deleted)
+        VALUES (#{url}, #{thumb}, #{takenAt}, #{note}, #{audioUrl}, #{audioDuration},
+                #{featured}, #{deleted})
+    </insert>
+
+    <update id="updateSelective">
+        UPDATE photo
+        <set>
+            <if test="url != null">url = #{url},</if>
+            <if test="thumb != null">thumb = #{thumb},</if>
+            <if test="takenAt != null">taken_at = #{takenAt},</if>
+            <if test="note != null">note = #{note},</if>
+            <if test="audioUrl != null">audio_url = #{audioUrl},</if>
+            <if test="audioDuration != null">audio_duration = #{audioDuration},</if>
+            <if test="featured != null">featured = #{featured},</if>
+            <if test="deleted != null">deleted = #{deleted},</if>
+        </set>
+        WHERE id = #{id}
+    </update>
+
+    <update id="updateDeleted">
+        UPDATE photo SET deleted = #{deleted} WHERE id = #{id}
+    </update>
+
+    <delete id="deleteById">
+        DELETE FROM photo WHERE id = #{id}
+    </delete>
+
+</mapper>

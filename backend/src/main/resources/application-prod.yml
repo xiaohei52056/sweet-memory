@@ -1,0 +1,28 @@
+# 生产环境配置：敏感值全部来自环境变量，不写死
+# 启动：java -jar sweet-memory.jar --spring.profiles.active=prod
+spring:
+  datasource:
+    url: jdbc:mysql://${DB_HOST:127.0.0.1}:${DB_PORT:3306}/sweet_memory?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&useSSL=false
+    username: ${DB_USER}
+    password: ${DB_PASSWORD}
+    hikari:
+      maximum-pool-size: 6
+      minimum-idle: 1
+
+app:
+  upload-dir: ${APP_UPLOAD_DIR}
+  jwt:
+    secret: ${APP_JWT_SECRET}
+  admins:
+    - username: ${ADMIN1_USER:star}
+      password-hash: ${ADMIN1_HASH}
+      nickname: ${ADMIN1_NICK:Star}
+    - username: ${ADMIN2_USER:river}
+      password-hash: ${ADMIN2_HASH}
+      nickname: ${ADMIN2_NICK:River}
+
+logging:
+  level:
+    root: warn
+  file:
+    name: ${LOG_FILE:/opt/sweet-memory/logs/app.log}

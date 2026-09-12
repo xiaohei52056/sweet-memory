@@ -1,0 +1,45 @@
+spring:
+  application:
+    name: sweet-memory
+  datasource:
+    # 本地开发默认值；生产用环境变量覆盖（见 application-prod.yml）
+    url: jdbc:mysql://127.0.0.1:3306/sweet_memory?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai&allowPublicKeyRetrieval=true&useSSL=false
+    username: ${DB_USER:sweet}
+    password: ${DB_PASSWORD:sweet2021}
+    hikari:
+      maximum-pool-size: 8
+      minimum-idle: 2
+  servlet:
+    multipart:
+      max-file-size: 30MB
+      max-request-size: 200MB
+
+server:
+  port: 8082
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+
+app:
+  # 上传文件存储根目录（本地默认 backend/data/uploads；生产用 APP_UPLOAD_DIR 覆盖为绝对路径）
+  upload-dir: ${APP_UPLOAD_DIR:./data/uploads}
+  # 照片静态访问前缀（开发环境由 Spring 直接映射；生产由 Nginx 托管同一目录）
+  public-base: /uploads
+  jwt:
+    # 生产环境务必用环境变量 APP_JWT_SECRET 覆盖为随机长字符串（≥32 字节）
+    secret: ${APP_JWT_SECRET:dfc1e388aa9dd57f6a2ad23af67d58ffacd75762871ee26e626bbd8d544bcc2c}
+    expire-days: 7
+  # 管理员账号（写死，bcrypt 哈希；明文密码见 README，请自行修改）
+  admins:
+    - username: star
+      password-hash: "$2a$10$wnfHMroUhfmQ9.48ETFFReqNreSImv68xKqGahVGtO3MyhmNYJaKW"
+      nickname: Star
+    - username: river
+      password-hash: "$2a$10$4ZidZ6N8GHS2MB4HpyLcZOMxqtoTEf.SZ1spgvaq8Nl7xIhOu4ruK"
+      nickname: River
+
+logging:
+  level:
+    root: info

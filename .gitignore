@@ -1,0 +1,24 @@
+# ---- 后端 ----
+target/
+*.class
+data/
+.my-local.cnf
+*.log
+
+# ---- 前端 ----
+node_modules/
+dist/
+*.local
+
+# ---- 归档旧代码（不上传）----
+_archive/
+
+# ---- 环境变量（含密钥，绝不提交）----
+.env
+*.env
+!*.env.example
+
+# ---- 编辑器 / 系统 ----
+.DS_Store
+.idea/
+.vscode/

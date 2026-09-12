@@ -1,0 +1,41 @@
+/* 首页艺术字体，由 tools/gen-art-fonts.mjs 生成，勿手改。
+   改动标题或诗句文案后需重跑：node tools/gen-art-fonts.mjs */
+@font-face {
+  font-family: 'LXGW WenKai';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/lxgw-title-661F.woff2') format('woff2');
+  unicode-range: U+661F;
+}
+@font-face {
+  font-family: 'LXGW WenKai';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/lxgw-title-6CB3.woff2') format('woff2');
+  unicode-range: U+6CB3;
+}
+@font-face {
+  font-family: 'LXGW WenKai';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/lxgw-title-56DE.woff2') format('woff2');
+  unicode-range: U+56DE;
+}
+@font-face {
+  font-family: 'LXGW WenKai';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/lxgw-title-5FC6.woff2') format('woff2');
+  unicode-range: U+5FC6;
+}
+@font-face {
+  font-family: 'ZCOOL XiaoWei';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('../assets/fonts/zcool-xiaowei-subset.woff2') format('woff2');
+}

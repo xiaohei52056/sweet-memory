@@ -1,0 +1,19 @@
+# 星河回忆后端 systemd 服务
+# 安装：cp deploy/systemd/sweet-memory.service /etc/systemd/system/
+#       systemctl daemon-reload && systemctl enable --now sweet-memory
+[Unit]
+Description=Sweet Memory (XingHe HuiYi) Backend
+After=network.target mysqld.service
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/sweet-memory
+ExecStart=/usr/bin/java -Xms128m -Xmx384m -XX:+UseSerialGC -jar /opt/sweet-memory/sweet-memory.jar --spring.profiles.active=prod
+EnvironmentFile=/opt/sweet-memory/sweet-memory.env
+Restart=on-failure
+RestartSec=5
+# 低内存机器友好：限制内存上限，超限由 systemd 杀掉重启
+MemoryMax=600M
+
+[Install]
+WantedBy=multi-user.target
