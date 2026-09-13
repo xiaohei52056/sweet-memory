@@ -15,10 +15,21 @@ const auth = useAuthStore()
 const photosStore = usePhotosStore()
 const ui = useUiStore()
 
-// 点击照片查看详情（复用全局 Lightbox）
+// 点击照片查看详情（复用全局 Lightbox；背面带编辑按钮）
 function viewDetail(p) {
-  ui.openLightbox(filtered.value, filtered.value.findIndex((x) => x.id === p.id))
+  ui.openLightbox(filtered.value, filtered.value.findIndex((x) => x.id === p.id), { editable: true })
 }
+
+// Lightbox 背面编辑按钮 → 打开编辑弹窗
+watch(
+  () => ui.editRequest,
+  (p) => {
+    if (p) {
+      openEdit(p)
+      ui.editRequest = null
+    }
+  }
+)
 
 /* ---------- 登录 ---------- */
 const loginForm = ref({ username: '', password: '' })
@@ -228,16 +239,19 @@ function openEdit(p) {
 async function saveEdit() {
   if (!editing.value) return
   const { id } = editing.value
-  await photosStore.updatePhoto(id, {
+  let updated = await photosStore.updatePhoto(id, {
     takenAt: editing.value.takenAt,
     note: editing.value.note,
   })
   // 录音产物：保存时上传；标记移除则清空语音
   if (recBlob.value) {
-    await photosStore.uploadAudio(id, recBlob.value, recSeconds.value)
+    updated = await photosStore.uploadAudio(id, recBlob.value, recSeconds.value)
   } else if (removeAudio.value) {
-    await photosStore.updatePhoto(id, { audioUrl: '', audioDuration: 0 })
+    updated = await photosStore.updatePhoto(id, { audioUrl: '', audioDuration: 0 })
   }
+  // store 更新用的是新数组，Lightbox 持旧引用，显式同步背面数据
+  const li = ui.lightbox.photos.findIndex((x) => x.id === id)
+  if (li >= 0) ui.lightbox.photos[li] = updated
   stopPlayback()
   editing.value = null
 }

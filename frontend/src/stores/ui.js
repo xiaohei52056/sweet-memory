@@ -6,7 +6,10 @@ export const useUiStore = defineStore('ui', {
       open: false,
       photos: [],
       index: 0,
+      editable: false,
     },
+    // 管理页编辑弹窗请求：Lightbox 背面按钮写入，AdminView 消费
+    editRequest: null,
   }),
 
   getters: {
@@ -14,8 +17,8 @@ export const useUiStore = defineStore('ui', {
   },
 
   actions: {
-    openLightbox(photos, index) {
-      this.lightbox = { open: true, photos, index }
+    openLightbox(photos, index, opts = {}) {
+      this.lightbox = { open: true, photos, index, editable: !!opts.editable }
     },
     closeLightbox() {
       this.lightbox.open = false

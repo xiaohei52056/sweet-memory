@@ -117,6 +117,17 @@ onBeforeUnmount(() => {
 
             <!-- 背面：留言 + 语音 -->
             <div class="face back">
+              <!-- 管理端：右上角编辑按钮 -->
+              <button
+                v-if="lightbox.editable"
+                class="back-edit"
+                aria-label="编辑这张回忆"
+                @click.stop="ui.editRequest = currentPhoto"
+              >
+                <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                  <path d="M17 3l4 4L8 20H4v-4z" />
+                </svg>
+              </button>
               <div class="back-inner">
                 <span class="back-label">回忆背面</span>
                 <p class="back-note serif">{{ currentPhoto.note || '（还没有留言）' }}</p>
@@ -253,6 +264,25 @@ onBeforeUnmount(() => {
   align-items: center;
   gap: 26px;
   width: 100%;
+}
+.back-edit {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--gold-bright);
+  background: rgba(232, 195, 126, 0.1);
+  border: 1px solid var(--gold-faint);
+  transition: transform 0.25s var(--ease-spring), background 0.25s;
+  z-index: 2;
+}
+.back-edit:active {
+  transform: scale(0.9);
 }
 .back-label {
   font-size: 12px;
