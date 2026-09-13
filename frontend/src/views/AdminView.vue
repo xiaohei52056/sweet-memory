@@ -245,6 +245,7 @@ async function saveEdit() {
 /* ---------- 语音录制（MediaRecorder，需安全上下文） ---------- */
 const canRecord = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined'
 const secureOk = typeof window !== 'undefined' ? window.isSecureContext : false
+const pageProtocol = typeof window !== 'undefined' ? window.location.protocol : ''
 const recState = ref('idle') // idle | recording | done
 const recSeconds = ref(0)
 const recBlob = ref(null)
@@ -628,11 +629,13 @@ onMounted(() => {
           <div class="field rec-field">
             <span>语音留言 <em class="cnt">最长 {{ MAX_REC_SECONDS }} 秒</em></span>
 
-            <!-- 不支持录音的环境提示 -->
-            <p v-if="!canRecord" class="rec-warn">当前浏览器不支持录音，请使用 Chrome / Edge 最新版</p>
-            <p v-else-if="!secureOk" class="rec-warn">
-              录音需要 HTTPS 或 localhost 环境（当前为非安全上下文，麦克风不可用）
+            <!-- 环境提示：非安全上下文优先（HTTP 下浏览器直接隐藏麦克风 API） -->
+            <p v-if="!secureOk" class="rec-warn">
+              录音需要 HTTPS 或 localhost 环境。当前为
+              <b>{{ pageProtocol }}</b> 页面，浏览器已禁用麦克风接口。
+              <span class="rec-warn-sub">（本地测试请用 http://localhost 访问；线上需先配置 HTTPS）</span>
             </p>
+            <p v-else-if="!canRecord" class="rec-warn">当前浏览器不支持录音，请使用 Chrome / Edge 最新版</p>
 
             <template v-else>
               <!-- 录制中 -->
@@ -1154,6 +1157,14 @@ onMounted(() => {
   font-size: 12px;
   line-height: 1.6;
   color: var(--ink-faint);
+}
+.rec-warn b {
+  color: var(--gold-bright);
+}
+.rec-warn-sub {
+  display: block;
+  margin-top: 2px;
+  opacity: 0.8;
 }
 .rec-err {
   margin-top: 6px;
