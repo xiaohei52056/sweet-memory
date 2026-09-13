@@ -62,9 +62,9 @@ public class PhotoController {
             Map<String, Object> meta = metaList.get(i);
 
             Photo p = new Photo();
-            String url = storage.save(f, "image");
-            p.setUrl(url);
-            p.setThumb(url); // 一期不生成缩略图，thumb 与 url 相同
+            String[] urls = storage.saveImageWithThumb(f); // [url, thumb]，缩略图失败自动兜底为 url
+            p.setUrl(urls[0]);
+            p.setThumb(urls[1]);
             p.setTakenAt(DateUtil.parseDate(meta.get("takenAt")));
             p.setNote(str(meta.get("note")));
             p.setFeatured(Boolean.TRUE.equals(meta.get("featured")));
@@ -108,15 +108,44 @@ public class PhotoController {
         return ResponseEntity.ok(Map.of("ok", true));
     }
 
-    /** 彻底删除（连同磁盘文件） */
+    /** 彻底删除（连同磁盘文件与缩略图） */
     @DeleteMapping("/{id}/final")
     public ResponseEntity<?> destroy(@PathVariable long id) {
         Photo p = photoMapper.findById(id);
         if (p == null) return ResponseEntity.status(404).body(Map.of("message", "照片不存在"));
         storage.deleteQuietly(p.getUrl());
+        if (p.getThumb() != null && !p.getThumb().equals(p.getUrl())) storage.deleteQuietly(p.getThumb());
         storage.deleteQuietly(p.getAudioUrl());
         photoMapper.deleteById(id);
         return ResponseEntity.ok(Map.of("ok", true));
+    }
+
+    /**
+     * 存量照片缩略图回填：为 thumb 仍等于 url 的记录逐张生成 480px 缩略图并更新。
+     * 幂等，可重复调用；单张失败跳过不中断。
+     */
+    @PostMapping("/thumbs/backfill")
+    public ResponseEntity<?> backfillThumbs() {
+        int done = 0;
+        int failed = 0;
+        for (Photo p : photoMapper.listByDeleted(false)) {
+            if (p.getThumb() != null && !p.getThumb().equals(p.getUrl())) continue;
+            try {
+                java.nio.file.Path original = storage.resolve(p.getUrl());
+                if (original == null || !java.nio.file.Files.exists(original)) { failed++; continue; }
+                String ext = p.getUrl().substring(p.getUrl().lastIndexOf('.') + 1).toLowerCase();
+                if (!ext.equals("jpg") && !ext.equals("jpeg") && !ext.equals("png")) continue; // webp/gif 跳过
+                String thumbUrl = storage.generateThumbFor(original);
+                Photo patch = new Photo();
+                patch.setId(p.getId());
+                patch.setThumb(thumbUrl);
+                photoMapper.updateSelective(patch);
+                done++;
+            } catch (Exception e) {
+                failed++;
+            }
+        }
+        return ResponseEntity.ok(Map.of("generated", done, "failed", failed));
     }
 
     /** 上传语音（二期小程序使用；接口先预留） */

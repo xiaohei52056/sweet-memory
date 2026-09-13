@@ -58,6 +58,13 @@ export const usePhotosStore = defineStore('photos', {
       return updated
     },
 
+    async uploadAudio(id, file, duration) {
+      const updated = await api.uploadAudio(id, file, duration)
+      this.photos = this.photos.map((p) => (p.id === id ? updated : p))
+      this.trashed = this.trashed.map((p) => (p.id === id ? updated : p))
+      return updated
+    },
+
     async trashPhoto(id) {
       await api.trashPhoto(id)
       const p = this.photos.find((x) => x.id === id)

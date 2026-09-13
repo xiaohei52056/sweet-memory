@@ -17,6 +17,12 @@ public class AppProperties {
     /** 照片静态访问前缀 */
     private String publicBase = "/uploads";
 
+    /** 前端构建产物目录（空 = 不托管前端，本地开发用 Vite） */
+    private String webDir = "";
+
+    /** 前端托管的基础路径（子路径部署，如 /mem） */
+    private String webBase = "/mem";
+
     private Jwt jwt = new Jwt();
 
     private List<Admin> admins = new ArrayList<>();
@@ -86,6 +92,22 @@ public class AppProperties {
 
     public void setPublicBase(String publicBase) {
         this.publicBase = publicBase;
+    }
+
+    public String getWebDir() {
+        return webDir;
+    }
+
+    public void setWebDir(String webDir) {
+        this.webDir = webDir;
+    }
+
+    public String getWebBase() {
+        return webBase;
+    }
+
+    public void setWebBase(String webBase) {
+        this.webBase = webBase;
     }
 
     public Jwt getJwt() {

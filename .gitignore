@@ -10,6 +10,9 @@ node_modules/
 dist/
 *.local
 
+# ---- 部署用 SSH 密钥（绝不提交）----
+.deploy/
+
 # ---- 归档旧代码（不上传）----
 _archive/
 

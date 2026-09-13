@@ -1,9 +1,9 @@
 <script setup>
 // ============================================================
-// 后台：登录 → 照片管理（悬浮+上传 / 搜索 / 分页 / 首页展示标记 / 下载）→ 回收站
-// 网页端不调用麦克风；语音仅可在小程序端录制（此处可试听/移除）
+// 后台：登录 → 照片管理（悬浮+上传 / 拖拽上传含文件夹 / 搜索 / 分页 / 首页展示标记 / 下载）→ 回收站
+// 语音留言：编辑弹窗内用 MediaRecorder 录制（需 HTTPS 或 localhost）
 // ============================================================
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onBeforeUnmount, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import exifr from 'exifr'
 import { useAuthStore } from '../stores/auth'
@@ -41,9 +41,11 @@ async function doLogin() {
 /* ---------- 页签 ---------- */
 const tab = ref('manage')
 
-/* ---------- 上传（左侧悬浮 + 号） ---------- */
+/* ---------- 上传（悬浮 + 号 / 拖拽照片或文件夹） ---------- */
 const fileInput = ref(null)
 const uploading = ref(false)
+const uploadProgress = ref({ done: 0, total: 0 })
+const dragging = ref(false)
 
 function pickFiles() {
   fileInput.value?.click()
@@ -51,6 +53,61 @@ function pickFiles() {
 function onFiles(e) {
   handleFiles([...(e.target.files || [])])
   e.target.value = ''
+}
+
+/* 拖拽：递归展开目录条目（文件夹），只收集图片 */
+async function collectDropItems(dt) {
+  const files = []
+  const entries = []
+  for (const item of dt.items) {
+    const entry = item.webkitGetAsEntry?.()
+    if (entry) entries.push(entry)
+  }
+  if (!entries.length) {
+    for (const f of dt.files) files.push(f)
+    return files
+  }
+  async function walk(entry, path) {
+    if (entry.isFile) {
+      const file = await new Promise((res, rej) => entry.file(res, rej)).catch(() => null)
+      if (file) files.push(file)
+    } else if (entry.isDirectory) {
+      const reader = entry.createReader()
+      // readEntries 单次最多返回 100 条，需循环直到空
+      let batch
+      do {
+        batch = await new Promise((res, rej) => reader.readEntries(res, rej)).catch(() => [])
+        for (const sub of batch) await walk(sub, `${path}/${entry.name}`)
+      } while (batch.length)
+    }
+  }
+  for (const e of entries) await walk(e, '')
+  return files
+}
+
+let dragDepth = 0
+function onDragEnter(e) {
+  if (tab.value !== 'manage' || uploading.value) return
+  if (!Array.from(e.dataTransfer?.types || []).includes('Files')) return
+  e.preventDefault()
+  dragDepth++
+  dragging.value = true
+}
+function onDragOver(e) {
+  if (dragging.value) e.preventDefault()
+}
+function onDragLeave(e) {
+  e.preventDefault()
+  dragDepth = Math.max(0, dragDepth - 1)
+  if (!dragDepth) dragging.value = false
+}
+async function onDrop(e) {
+  e.preventDefault()
+  dragDepth = 0
+  dragging.value = false
+  if (tab.value !== 'manage' || uploading.value) return
+  const files = await collectDropItems(e.dataTransfer)
+  handleFiles(files)
 }
 
 // 读取照片 EXIF 拍摄时间；exifr 解析失败或超时时返回 null（由调用方兜底为当天）
@@ -70,19 +127,38 @@ function readTakenAt(file) {
   ])
 }
 
+// 单批上限：兼顾 200MB 请求体限制与上传耗时（原图约 3~8MB/张）
+const BATCH_SIZE = 20
+
 async function handleFiles(files) {
   const imgs = files.filter((f) => f.type.startsWith('image/'))
   if (!imgs.length) return
   uploading.value = true
+  uploadProgress.value = { done: 0, total: imgs.length }
   try {
+    // 并发读取 EXIF（限 6 路，避免大文件夹下内存抖动）
     const items = []
-    for (const f of imgs) {
-      const takenAt = (await readTakenAt(f)) || new Date().toISOString().slice(0, 10)
-      items.push({ file: f, takenAt, note: '' })
+    let cursor = 0
+    async function worker() {
+      while (cursor < imgs.length) {
+        const f = imgs[cursor++]
+        const takenAt = (await readTakenAt(f)) || new Date().toISOString().slice(0, 10)
+        items.push({ file: f, takenAt, note: '' })
+      }
     }
-    await photosStore.addPhotos(items)
+    await Promise.all(Array.from({ length: Math.min(6, imgs.length) }, worker))
+
+    // 分批提交，逐批累计进度
+    for (let i = 0; i < items.length; i += BATCH_SIZE) {
+      const batch = items.slice(i, i + BATCH_SIZE)
+      await photosStore.addPhotos(batch)
+      uploadProgress.value.done = Math.min(i + BATCH_SIZE, items.length)
+    }
   } catch (e) {
-    alert(e.message || '上传失败')
+    const ok = uploadProgress.value.done
+    alert(
+      (ok ? `已上传 ${ok}/${imgs.length} 张后中断：` : '') + (e.message || '上传失败')
+    )
   } finally {
     uploading.value = false
   }
@@ -146,16 +222,167 @@ const editing = ref(null)
 const noteLen = computed(() => (editing.value?.note || '').length)
 
 function openEdit(p) {
-  editing.value = { id: p.id, takenAt: p.takenAt, note: p.note || '' }
+  resetRecorder()
+  editing.value = { id: p.id, takenAt: p.takenAt, note: p.note || '', audioUrl: p.audioUrl || '' }
 }
 async function saveEdit() {
   if (!editing.value) return
-  await photosStore.updatePhoto(editing.value.id, {
+  const { id } = editing.value
+  await photosStore.updatePhoto(id, {
     takenAt: editing.value.takenAt,
     note: editing.value.note,
   })
+  // 录音产物：保存时上传；标记移除则清空语音
+  if (recBlob.value) {
+    await photosStore.uploadAudio(id, recBlob.value, recSeconds.value)
+  } else if (removeAudio.value) {
+    await photosStore.updatePhoto(id, { audioUrl: '', audioDuration: 0 })
+  }
+  stopPlayback()
   editing.value = null
 }
+
+/* ---------- 语音录制（MediaRecorder，需安全上下文） ---------- */
+const canRecord = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined'
+const secureOk = typeof window !== 'undefined' ? window.isSecureContext : false
+const recState = ref('idle') // idle | recording | done
+const recSeconds = ref(0)
+const recBlob = ref(null)
+const recUrl = ref('')
+const removeAudio = ref(false)
+const recErr = ref('')
+
+let mediaStream = null
+let recorder = null
+let recTimer = null
+const playback = ref(null)
+
+function pickMimeType() {
+  const list = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus']
+  return list.find((t) => MediaRecorder.isTypeSupported(t)) || ''
+}
+function extFromMime(mime) {
+  if (mime.includes('mp4')) return 'm4a'
+  if (mime.includes('ogg')) return 'ogg'
+  return 'webm'
+}
+
+function resetRecorder() {
+  stopPlayback()
+  if (recorder && recState.value === 'recording') recorder.stop()
+  releaseStream()
+  recState.value = 'idle'
+  recSeconds.value = 0
+  recBlob.value = null
+  removeAudio.value = false
+  recErr.value = ''
+  if (recUrl.value) URL.revokeObjectURL(recUrl.value)
+  recUrl.value = ''
+}
+
+function releaseStream() {
+  mediaStream?.getTracks().forEach((t) => t.stop())
+  mediaStream = null
+}
+
+async function startRecord() {
+  recErr.value = ''
+  removeAudio.value = false
+  try {
+    mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+  } catch (e) {
+    recErr.value =
+      e.name === 'NotAllowedError'
+        ? '麦克风权限被拒绝，请在浏览器地址栏允许后重试'
+        : e.name === 'NotFoundError'
+          ? '未检测到麦克风设备'
+          : `无法启动录音：${e.message || e.name}`
+    return
+  }
+  const mime = pickMimeType()
+  try {
+    recorder = new MediaRecorder(mediaStream, mime ? { mimeType: mime } : undefined)
+  } catch (e) {
+    recErr.value = `当前浏览器不支持录音：${e.message || e.name}`
+    releaseStream()
+    return
+  }
+  const chunks = []
+  recorder.ondataavailable = (ev) => ev.data.size && chunks.push(ev.data)
+  recorder.onstop = () => {
+    releaseStream()
+    clearInterval(recTimer)
+    const type = mime || recorder.mimeType || 'audio/webm'
+    recBlob.value = new File(chunks, `voice.${extFromMime(type)}`, { type })
+    if (recUrl.value) URL.revokeObjectURL(recUrl.value)
+    recUrl.value = URL.createObjectURL(recBlob.value)
+    recState.value = 'done'
+  }
+  recSeconds.value = 0
+  recTimer = setInterval(() => {
+    recSeconds.value++
+    if (recSeconds.value >= MAX_REC_SECONDS) stopRecord()
+  }, 1000)
+  recorder.start()
+  recState.value = 'recording'
+}
+
+const MAX_REC_SECONDS = 60
+
+function stopRecord() {
+  if (recorder && recState.value === 'recording') recorder.stop()
+}
+
+function discardRecord() {
+  if (recUrl.value) URL.revokeObjectURL(recUrl.value)
+  recUrl.value = ''
+  recBlob.value = null
+  recSeconds.value = 0
+  recState.value = 'idle'
+}
+
+function stopPlayback() {
+  if (playback.value) {
+    playback.value.pause()
+    playback.value = null
+  }
+}
+
+/* 试听：新录制的用本地 blob，已有的用服务器 URL */
+function playRecording() {
+  stopPlayback()
+  const src = recUrl.value || editing.value?.audioUrl
+  if (!src) return
+  const a = new Audio(src)
+  playback.value = a
+  a.play().catch(() => {
+    playback.value = null
+  })
+  a.onended = () => {
+    playback.value = null
+  }
+}
+
+/* 移除语音：清掉已有（保存时生效）或丢弃未保存的新录音 */
+function removeRecording() {
+  if (recBlob.value) {
+    discardRecord()
+    return
+  }
+  removeAudio.value = true
+  stopPlayback()
+}
+
+const recTimeText = computed(() => {
+  const s = recSeconds.value
+  return `${String(Math.floor(s / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`
+})
+
+// 弹窗关闭（取消/点遮罩）时释放录音资源
+watch(editing, (v) => {
+  if (!v) resetRecorder()
+})
+onBeforeUnmount(resetRecorder)
 
 /* ---------- 删除 / 回收站 ---------- */
 async function trash(p) {
@@ -181,7 +408,13 @@ onMounted(() => {
 </script>
 
 <template>
-  <main class="admin">
+  <main
+    class="admin"
+    @dragenter="onDragEnter"
+    @dragover="onDragOver"
+    @dragleave="onDragLeave"
+    @drop="onDrop"
+  >
     <!-- ============ 登录 ============ -->
     <section v-if="!auth.isAdmin" class="login-wrap">
       <form class="login glass" @submit.prevent="doLogin">
@@ -262,7 +495,7 @@ onMounted(() => {
         <!-- 网格 -->
         <div class="grid">
           <article v-for="p in paged" :key="p.id" class="cell" :class="{ featured: p.featured }" @click="viewDetail(p)">
-            <img :src="p.thumb" :alt="p.note" loading="lazy" />
+            <img :src="p.thumb" :alt="p.note" loading="lazy" decoding="async" />
             <span v-if="p.featured" class="cell-flag">首页</span>
             <div class="cell-info">
               <span class="cell-date">{{ p.takenAt }}</span>
@@ -316,7 +549,7 @@ onMounted(() => {
         <p v-if="!photosStore.trashed.length" class="empty">回收站是空的</p>
         <div class="grid">
           <article v-for="p in photosStore.trashed" :key="p.id" class="cell trashed">
-            <img :src="p.thumb" :alt="p.note" loading="lazy" />
+            <img :src="p.thumb" :alt="p.note" loading="lazy" decoding="async" />
             <div class="cell-info">
               <span class="cell-date">{{ p.takenAt }}</span>
               <span class="cell-note">{{ p.note || '—' }}</span>
@@ -337,19 +570,42 @@ onMounted(() => {
         </div>
       </div>
 
-      <!-- 左侧悬浮上传按钮 -->
-      <button
-        v-if="tab === 'manage'"
-        class="fab"
-        :title="uploading ? '正在存入星河…' : '添加照片'"
-        @click="pickFiles"
-      >
-        <input ref="fileInput" type="file" accept="image/*" multiple hidden @click.stop @change="onFiles" />
-        <svg v-if="!uploading" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 5v14M5 12h14" />
-        </svg>
-        <span v-else class="fab-spin"></span>
-      </button>
+      <!-- 悬浮上传按钮（点击选照片；也可把照片/文件夹拖到页面任意位置上传） -->
+      <div v-if="tab === 'manage'" class="fab-stack">
+        <input
+          ref="fileInput"
+          type="file"
+          accept="image/*"
+          multiple
+          hidden
+          @change="onFiles"
+        />
+        <span v-if="uploading" class="fab-progress">{{ uploadProgress.done }}/{{ uploadProgress.total }}</span>
+        <button
+          class="fab"
+          :disabled="uploading"
+          :title="uploading ? '正在存入星河…' : '添加照片（也可拖拽照片或文件夹到页面）'"
+          @click="pickFiles"
+        >
+          <svg v-if="!uploading" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 5v14M5 12h14" />
+          </svg>
+          <span v-else class="fab-spin"></span>
+        </button>
+      </div>
+
+      <!-- 拖拽悬停遮罩 -->
+      <Transition name="dlg">
+        <div v-if="dragging" class="drop-mask">
+          <div class="drop-hint glass">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+              <path d="M12 16V4m0 0L7 9m5-5l5 5" />
+              <path d="M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" />
+            </svg>
+            <p>松开即可上传（支持照片与整个文件夹）</p>
+          </div>
+        </div>
+      </Transition>
     </section>
 
     <!-- ============ 编辑弹窗 ============ -->
@@ -368,11 +624,53 @@ onMounted(() => {
             <textarea v-model="editing.note" maxlength="20" rows="2" placeholder="写一句想说的话（20字以内）"></textarea>
           </label>
 
-          <p class="dlg-tip">语音留言请在小程序端录制（网页端不开放麦克风）</p>
+          <!-- 语音留言 -->
+          <div class="field rec-field">
+            <span>语音留言 <em class="cnt">最长 {{ MAX_REC_SECONDS }} 秒</em></span>
+
+            <!-- 不支持录音的环境提示 -->
+            <p v-if="!canRecord" class="rec-warn">当前浏览器不支持录音，请使用 Chrome / Edge 最新版</p>
+            <p v-else-if="!secureOk" class="rec-warn">
+              录音需要 HTTPS 或 localhost 环境（当前为非安全上下文，麦克风不可用）
+            </p>
+
+            <template v-else>
+              <!-- 录制中 -->
+              <div v-if="recState === 'recording'" class="rec-row">
+                <span class="rec-dot"></span>
+                <span class="rec-time">{{ recTimeText }}</span>
+                <button class="btn-ghost rec-btn" @click="stopRecord">停止</button>
+              </div>
+
+              <!-- 已录制待保存 -->
+              <div v-else-if="recState === 'done'" class="rec-row">
+                <button class="btn-ghost rec-btn" @click="playRecording">试听</button>
+                <span class="rec-time">{{ recTimeText }}</span>
+                <button class="btn-ghost rec-btn" @click="startRecord">重录</button>
+                <button class="btn-ghost rec-btn danger-text" @click="discardRecord">丢弃</button>
+              </div>
+
+              <!-- 已有语音（未重录时） -->
+              <div v-else-if="editing.audioUrl && !removeAudio" class="rec-row">
+                <button class="btn-ghost rec-btn" @click="playRecording">试听</button>
+                <button class="btn-ghost rec-btn" @click="startRecord">重录</button>
+                <button class="btn-ghost rec-btn danger-text" @click="removeRecording">移除</button>
+              </div>
+
+              <!-- 空闲 -->
+              <div v-else class="rec-row">
+                <button class="btn-ghost rec-btn" @click="startRecord">
+                  {{ editing.audioUrl ? '重新录制' : '开始录音' }}
+                </button>
+              </div>
+
+              <p v-if="recErr" class="rec-err">{{ recErr }}</p>
+            </template>
+          </div>
 
           <div class="dlg-actions">
             <button class="btn-ghost" @click="editing = null">取消</button>
-            <button class="btn-gold" @click="saveEdit">保存</button>
+            <button class="btn-gold" :disabled="recState === 'recording'" @click="saveEdit">保存</button>
           </div>
         </div>
       </div>
@@ -684,8 +982,7 @@ onMounted(() => {
   gap: 4px;
   opacity: 0;
   transition: opacity 0.25s;
-  background: rgba(4, 6, 15, 0.55);
-  backdrop-filter: blur(6px);
+  background: rgba(4, 6, 15, 0.72);
   border-radius: 999px;
   padding: 3px;
   z-index: 2;
@@ -731,10 +1028,26 @@ onMounted(() => {
 }
 
 /* ---------- 右下悬浮上传按钮 ---------- */
-.fab {
+.fab-stack {
   position: fixed;
   right: 30px;
   bottom: 34px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 14px;
+  z-index: 20;
+}
+.fab-progress {
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-bright, #e8c37e);
+  background: rgba(3, 5, 12, 0.65);
+  border: 1px solid rgba(232, 195, 126, 0.35);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+.fab {
   width: 54px;
   height: 54px;
   border-radius: 50%;
@@ -745,7 +1058,10 @@ onMounted(() => {
   color: #1a1408;
   box-shadow: 0 10px 30px rgba(232, 195, 126, 0.35), 0 4px 14px rgba(0, 0, 0, 0.4);
   transition: transform 0.3s var(--ease-spring), box-shadow 0.3s;
-  z-index: 20;
+}
+.fab:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 .fab:hover {
   transform: scale(1.1);
@@ -796,6 +1112,79 @@ onMounted(() => {
   font-size: 13px;
   color: var(--ink-faint);
 }
+
+/* ---------- 语音录制 ---------- */
+.rec-field > span {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+.rec-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 8px;
+}
+.rec-btn {
+  padding: 7px 16px;
+  font-size: 13px;
+}
+.rec-time {
+  font-variant-numeric: tabular-nums;
+  color: var(--gold-bright);
+  font-size: 14px;
+  letter-spacing: 0.05em;
+}
+.rec-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff5b5b;
+  animation: recPulse 1s ease-in-out infinite;
+}
+@keyframes recPulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.8); }
+}
+.danger-text {
+  color: #ff8a8a;
+}
+.rec-warn {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.6;
+  color: var(--ink-faint);
+}
+.rec-err {
+  margin-top: 6px;
+  font-size: 12px;
+  color: #ff8a8a;
+}
+
+/* ---------- 拖拽上传遮罩 ---------- */
+.drop-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: rgba(3, 5, 12, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.drop-hint {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 34px 46px;
+  border-radius: var(--r-lg);
+  border: 1.5px dashed rgba(232, 195, 126, 0.6);
+  color: var(--gold-bright);
+  font-size: 15px;
+  letter-spacing: 0.08em;
+}
 .dlg-actions {
   display: flex;
   justify-content: flex-end;
@@ -816,7 +1205,7 @@ onMounted(() => {
   .admin-tabs { order: 3; width: 100%; justify-content: center; }
   .admin-body { padding: 16px 14px 90px; }
   .grid { grid-template-columns: repeat(2, 1fr); gap: 12px; }
-  .fab { right: 16px; bottom: 20px; }
+  .fab-stack { right: 16px; bottom: 20px; }
   .fab:hover { transform: scale(1.08); }
   .toolbar-meta { margin-left: 0; width: 100%; }
 }

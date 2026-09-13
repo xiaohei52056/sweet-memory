@@ -1,7 +1,8 @@
 import { createRouter, createWebHistory } from 'vue-router'
 
 const router = createRouter({
-  history: createWebHistory(),
+  // BASE_URL 由 Vite 注入（子路径部署时为 /mem/），本地开发为 /
+  history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
     {
       path: '/',

@@ -2,6 +2,8 @@ import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
 
 export default defineConfig({
+  // 子路径部署时通过 VITE_BASE 指定，如 /mem/；本地开发默认根路径
+  base: process.env.VITE_BASE || '/',
   plugins: [vue()],
   server: {
     port: 5173,
