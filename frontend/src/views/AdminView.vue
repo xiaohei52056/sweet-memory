@@ -623,7 +623,8 @@ onMounted(() => {
       </Transition>
     </section>
 
-    <!-- ============ 编辑弹窗 ============ -->
+    <!-- ============ 编辑弹窗（Teleport 到 body，避免被 .admin 层叠上下文限制在 Lightbox 之下） ============ -->
+    <Teleport to="body">
     <Transition name="dlg">
       <div v-if="editing" class="dialog-mask" @click.self="editing = null">
         <div class="dialog glass">
@@ -692,6 +693,7 @@ onMounted(() => {
         </div>
       </div>
     </Transition>
+    </Teleport>
 
     <audio v-if="previewAudio" :src="previewAudio" autoplay @ended="previewAudio = null"></audio>
   </main>
