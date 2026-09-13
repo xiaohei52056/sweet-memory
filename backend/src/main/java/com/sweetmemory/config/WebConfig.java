@@ -59,11 +59,12 @@ public class WebConfig implements WebMvcConfigurer {
         }
     }
 
-    /** 开发环境跨域：Vite dev server 直连 8082 时免配代理 */
+    /** 跨域允许源：Vite dev server + 生产站点（HTTPS 下 module script 会带 Origin 头） */
     @Override
     public void addCorsMappings(CorsRegistry registry) {
         registry.addMapping("/**")
-                .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*")
+                .allowedOriginPatterns("http://localhost:*", "http://127.0.0.1:*",
+                        "https://8.148.6.228", "http://8.148.6.228:*")
                 .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
                 .allowedHeaders("*")
                 .maxAge(3600);
